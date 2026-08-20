@@ -405,9 +405,9 @@
         for (var k = 0; k < history.length; k++) {
             var item = history[k];
             if (item.role === 'user') {
-                renderUserBubble(item.text);
+                renderUserBubble(item.text, item.lamport);
             } else if (item.role === 'assistant') {
-                renderAssistantBubble(item.chunks, item.docName);
+                renderAssistantBubble(item.chunks, item.docName, item.lamport);
             } else if (item.role === 'error') {
                 renderErrorBubble(item.text);
             }
@@ -437,8 +437,10 @@
             chatSessions[targetDocId] = [];
         }
 
+        var currentLamport = dom.metricLamportClient.textContent || "N/A";
+
         // Add user message to session
-        chatSessions[targetDocId].push({ role: 'user', text: question });
+        chatSessions[targetDocId].push({ role: 'user', text: question, lamport: currentLamport });
         renderChatSession(targetDocId);
 
         dom.queryInput.value = '';
@@ -470,11 +472,12 @@
                     return;
                 }
 
-                // Add assistant response to session
+        // Add assistant response to session
                 chatSessions[targetDocId].push({
                     role: 'assistant',
                     chunks: data,
-                    docName: targetDocName
+                    docName: targetDocName,
+                    lamport: dom.metricLamportClient.textContent || "N/A"
                 });
 
                 renderChatSession(targetDocId);
@@ -484,18 +487,22 @@
         );
     }
 
-    function renderUserBubble(text) {
+    function renderUserBubble(text, lamportTime) {
         var bubble = document.createElement('div');
         bubble.className = 'chat-bubble user';
-        bubble.innerHTML = '<div class="user-msg-content">' + esc(text) + '</div>';
+        bubble.innerHTML = '<div class="user-msg-content">' + esc(text) 
+            + '<div style="font-size:9px; color:rgba(255,255,255,0.6); text-align:right; margin-top:4px;">'
+            + 'Lamport: ' + esc(lamportTime || "N/A") + '</div></div>';
         dom.chatContainer.appendChild(bubble);
     }
 
-    function renderAssistantBubble(chunks, docName) {
+    function renderAssistantBubble(chunks, docName, lamportTime) {
         var bubble = document.createElement('div');
         bubble.className = 'chat-bubble assistant';
 
-        var html = '<div class="assistant-msg-header">RAG Context Response (' + esc(docName) + ')</div>';
+        var html = '<div class="assistant-msg-header">RAG Context Response (' + esc(docName) + ') '
+            + '<span style="float:right; color:var(--accent-purple); font-size:10px; background:var(--accent-purple-dim); padding:2px 6px; border-radius:4px;">'
+            + 'Logical Lamport: ' + esc(lamportTime || "N/A") + '</span></div>';
 
         for (var i = 0; i < chunks.length; i++) {
             var r = chunks[i];
@@ -596,10 +603,21 @@
                 + '</svg> Sync Now';
 
             if (!err && data) {
-                addLogEntry('sync',
-                    'Sync #' + data.syncCount
+                var syncMsg = 'Sync #' + data.syncCount
                     + ' — Offset: ' + (data.offset >= 0 ? '+' : '')
-                    + data.offset + 'ms, RTT: ' + data.rtt + 'ms');
+                    + data.offset + 'ms, RTT: ' + data.rtt + 'ms';
+                    
+                addLogEntry('sync', syncMsg);
+                
+                // Also add a visible event to the current chat session if in Ask view
+                var targetDocId = dom.docSelectDropdown.value || "0";
+                if (!chatSessions[targetDocId]) {
+                    chatSessions[targetDocId] = [];
+                }
+                chatSessions[targetDocId].push({ role: 'error', text: 'System Clock Synchronized (Cristian\'s Algorithm). Offset: ' + data.offset + 'ms' });
+                if (dom.viewAsk.classList.contains('active')) {
+                    renderChatSession(targetDocId);
+                }
             }
             fetchStatus();
         });

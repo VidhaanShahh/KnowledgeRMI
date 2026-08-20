@@ -111,8 +111,7 @@ public class VectorSearch {
 
         // Fallback: If vector search yields 0 results, run Keyword Substring Overlap search
         if (results.isEmpty()) {
-            String lowerQuery = query.toLowerCase().trim();
-            String[] queryWords = lowerQuery.split("\\s+");
+            List<String> queryWords = tokenize(query);
 
             for (Map.Entry<Integer, String> entry : chunkTexts.entrySet()) {
                 int chunkId = entry.getKey();
@@ -132,7 +131,7 @@ public class VectorSearch {
                 }
 
                 if (matchCount > 0) {
-                    double fallbackScore = 0.5 + (0.5 * matchCount / queryWords.length);
+                    double fallbackScore = 0.5 + (0.5 * matchCount / queryWords.size());
                     results.add(new SearchResult(chunkId, entry.getValue(), Math.min(fallbackScore, 0.95)));
                 }
             }
