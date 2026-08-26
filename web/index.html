@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Autonomous Enterprise Knowledge Base — RAG Copilot Dashboard">
+    <meta name="description" content="Autonomous Enterprise Knowledge Base — RAG Copilot Dashboard with Distributed Clock Synchronization">
     <title>Knowledge Base — RAG Copilot</title>
     <link rel="stylesheet" href="style.css">
     <!-- PDF.js for client-side PDF text extraction -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
+
+<!-- Toast Notification Container -->
+<div class="toast-container" id="toast-container"></div>
 
 <div class="app-layout">
 
@@ -38,7 +41,7 @@
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
-                Chat & Copilot
+                Chat &amp; Copilot
             </div>
 
             <div class="nav-section">Infrastructure</div>
@@ -48,6 +51,14 @@
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                 </svg>
                 System Monitor
+            </div>
+
+            <div class="nav-item" data-view="demo" id="nav-demo">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Clock Demo
             </div>
         </nav>
 
@@ -64,10 +75,19 @@
 
         <div class="top-bar">
             <h2 id="page-title">Documents</h2>
-            <div class="top-bar-actions">
-                <span id="top-lamport" style="font-size:12px; color: var(--text-muted);">
-                    Lamport: —
-                </span>
+
+            <!-- Live Clock Ticker Strip -->
+            <div class="clock-ticker-strip" id="clock-ticker-strip">
+                <span class="ticker-label">SRV</span>
+                <span class="ticker-value server" id="ticker-server-time">--:--:--</span>
+                <span class="ticker-sep"></span>
+                <span class="ticker-label">CLI</span>
+                <span class="ticker-value" id="ticker-client-time">--:--:--</span>
+                <span class="ticker-sep"></span>
+                <span class="ticker-label">Δ</span>
+                <span class="ticker-offset ok" id="ticker-offset">0ms</span>
+                <span class="ticker-sep"></span>
+                <span class="ticker-lamport" id="ticker-lamport">L:0</span>
             </div>
         </div>
 
@@ -78,27 +98,89 @@
             <!-- ======================== -->
             <div class="view active" id="view-documents">
 
-                <!-- Upload Zone -->
+                <!-- Upload Zone — Redesigned -->
                 <div class="upload-zone" id="upload-zone">
-                    <div class="upload-icon">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="1.5">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
+                    <div class="upload-icon-wrap">
+                        <div class="upload-icon">
+                            <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <div class="upload-file-types">
+                            <span class="file-type-badge pdf">PDF</span>
+                            <span class="file-type-badge txt">TXT</span>
+                        </div>
                     </div>
                     <p class="upload-text">
-                        Drop a <strong>.pdf</strong> or <strong>.txt</strong> file here, or
+                        Drop files here, or
                         <label for="file-input" class="upload-link">browse</label>
                     </p>
                     <p class="upload-sub">PDF text is extracted in your browser — nothing leaves your network</p>
-                    <input type="file" id="file-input" accept=".pdf,.txt" style="display:none">
+                    <input type="file" id="file-input" accept=".pdf,.txt" multiple style="display:none">
                 </div>
 
-                <div id="upload-progress" class="upload-progress" style="display:none;">
-                    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-                    <span class="progress-text" id="progress-text">Processing...</span>
+                <!-- Multi-Step Upload Pipeline -->
+                <div class="upload-pipeline" id="upload-pipeline">
+                    <div class="pipeline-header">
+                        <div class="pipeline-filename">
+                            <span class="file-icon" id="pipeline-file-icon">📄</span>
+                            <span id="pipeline-filename">document.pdf</span>
+                        </div>
+                        <div class="pipeline-file-meta">
+                            <span id="pipeline-file-size">— KB</span>
+                            <span id="pipeline-file-pages">— pages</span>
+                        </div>
+                    </div>
+
+                    <div class="pipeline-steps" id="pipeline-steps">
+                        <div class="pipeline-step" data-step="select">
+                            <div class="pipeline-step-dot">1</div>
+                            <div class="pipeline-step-label">Select</div>
+                        </div>
+                        <div class="pipeline-connector" data-after="select"></div>
+                        <div class="pipeline-step" data-step="extract">
+                            <div class="pipeline-step-dot">2</div>
+                            <div class="pipeline-step-label">Extract</div>
+                        </div>
+                        <div class="pipeline-connector" data-after="extract"></div>
+                        <div class="pipeline-step" data-step="chunk">
+                            <div class="pipeline-step-dot">3</div>
+                            <div class="pipeline-step-label">Chunk</div>
+                        </div>
+                        <div class="pipeline-connector" data-after="chunk"></div>
+                        <div class="pipeline-step" data-step="index">
+                            <div class="pipeline-step-dot">4</div>
+                            <div class="pipeline-step-label">Index</div>
+                        </div>
+                        <div class="pipeline-connector" data-after="index"></div>
+                        <div class="pipeline-step" data-step="done">
+                            <div class="pipeline-step-dot">✓</div>
+                            <div class="pipeline-step-label">Done</div>
+                        </div>
+                    </div>
+
+                    <div class="pipeline-progress-bar">
+                        <div class="pipeline-progress-fill" id="pipeline-progress-fill"></div>
+                    </div>
+                    <div class="pipeline-status-text" id="pipeline-status-text">Initializing...</div>
+
+                    <!-- Text Preview -->
+                    <div class="file-preview-panel" id="file-preview-panel">
+                        <div class="file-preview-header">Extracted Text Preview</div>
+                        <div class="file-preview-content" id="file-preview-content"></div>
+                    </div>
+                </div>
+
+                <!-- Upload Queue for Batch Uploads -->
+                <div class="upload-queue" id="upload-queue" style="display:none;">
+                    <div class="upload-queue-title">
+                        Upload Queue
+                        <span class="queue-count" id="queue-count">0</span>
+                    </div>
+                    <div id="upload-queue-list"></div>
                 </div>
 
                 <!-- Documents Table -->
@@ -187,6 +269,19 @@
                     </span>
                 </div>
 
+                <!-- Offset History Sparkline -->
+                <div class="sparkline-container" id="sparkline-container">
+                    <div class="sparkline-header">
+                        <span class="sparkline-title">Clock Offset History (ms)</span>
+                        <div class="sparkline-legend">
+                            <span><span class="sparkline-legend-dot" style="background:var(--accent-cyan)"></span>Offset</span>
+                            <span><span class="sparkline-legend-dot" style="background:var(--accent-green)"></span>Sync Event</span>
+                            <span><span class="sparkline-legend-dot" style="background:var(--accent-amber)"></span>±100ms threshold</span>
+                        </div>
+                    </div>
+                    <svg class="sparkline-svg" id="sparkline-svg" viewBox="0 0 800 80" preserveAspectRatio="none"></svg>
+                </div>
+
                 <div class="metrics-grid">
                     <div class="metric-card" id="card-status">
                         <div class="metric-label">Sync Status</div>
@@ -228,6 +323,158 @@
                     </div>
                     <div class="event-log-body" id="event-log-body"></div>
                 </div>
+            </div>
+
+            <!-- ======================== -->
+            <!--  CLOCK SYNC DEMO VIEW    -->
+            <!-- ======================== -->
+            <div class="view" id="view-demo">
+
+                <!-- Section 1: Dual Clocks -->
+                <div class="demo-section">
+                    <h3 class="demo-section-title">⏱ Physical Clock Synchronization</h3>
+                    <p class="demo-section-desc">Cristian's Algorithm — synchronizing distributed clocks via RMI round-trip timing</p>
+
+                    <div class="dual-clocks">
+                        <div class="clock-display server-clock">
+                            <div class="clock-label">RMI Server Clock</div>
+                            <div class="clock-time" id="demo-server-time">--:--:--.---</div>
+                            <div class="clock-sub">Remote physical time (estimated)</div>
+                        </div>
+                        <div class="clock-network">
+                            <div class="network-label">RMI Network</div>
+                            <div class="network-line">
+                                <div class="network-packet request" id="net-packet-req"></div>
+                                <div class="network-packet response" id="net-packet-res"></div>
+                            </div>
+                            <div class="network-rtt" id="demo-rtt-display">RTT: —ms</div>
+                        </div>
+                        <div class="clock-display client-clock">
+                            <div class="clock-label">HTTP Bridge Clock</div>
+                            <div class="clock-time" id="demo-client-time">--:--:--.---</div>
+                            <div class="clock-sub">Local physical time</div>
+                        </div>
+                    </div>
+
+                    <div class="offset-indicator">
+                        <span class="offset-indicator-label">Offset (Δ):</span>
+                        <div class="offset-bar">
+                            <div class="offset-bar-center"></div>
+                            <div class="offset-bar-needle" id="demo-offset-needle"></div>
+                        </div>
+                        <span class="offset-indicator-value" id="demo-offset-val">0ms</span>
+                    </div>
+                </div>
+
+                <!-- Section 2: Cristian's Step-by-Step -->
+                <div class="demo-section">
+                    <div class="demo-section-header">
+                        <div>
+                            <h3 class="demo-section-title">📐 Cristian's Algorithm — Step by Step</h3>
+                            <p class="demo-section-desc">Click below to run a real sync and watch each step</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-run-cristian">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                            Run Demonstration
+                        </button>
+                    </div>
+
+                    <div class="cristian-steps" id="cristian-steps">
+                        <div class="cristian-step" id="cstep-1">
+                            <div class="cristian-step-num">1</div>
+                            <div class="cristian-step-body">
+                                <div class="cristian-step-title">Client records T₁</div>
+                                <div class="cristian-step-desc">HTTP Bridge records its local time <strong>before</strong> sending the RMI request</div>
+                                <code class="cristian-value" id="cv-t1">T₁ = waiting...</code>
+                            </div>
+                        </div>
+                        <div class="cristian-step" id="cstep-2">
+                            <div class="cristian-step-num">2</div>
+                            <div class="cristian-step-body">
+                                <div class="cristian-step-title">Server returns its physical clock</div>
+                                <div class="cristian-step-desc">RMI Server reads <code>System.currentTimeMillis()</code> and sends it back</div>
+                                <code class="cristian-value" id="cv-ts">T_server = waiting...</code>
+                            </div>
+                        </div>
+                        <div class="cristian-step" id="cstep-3">
+                            <div class="cristian-step-num">3</div>
+                            <div class="cristian-step-body">
+                                <div class="cristian-step-title">Client records T₄</div>
+                                <div class="cristian-step-desc">HTTP Bridge records when the RMI response was received</div>
+                                <code class="cristian-value" id="cv-t4">T₄ = waiting...</code>
+                            </div>
+                        </div>
+                        <div class="cristian-step" id="cstep-4">
+                            <div class="cristian-step-num">4</div>
+                            <div class="cristian-step-body">
+                                <div class="cristian-step-title">Calculate offset &amp; adjust</div>
+                                <div class="cristian-step-desc"><code>RTT = T₄ − T₁</code> &nbsp;·&nbsp; <code>Offset = (T_server + RTT/2) − T₄</code></div>
+                                <code class="cristian-value" id="cv-result">Offset = waiting...</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Lamport Logical Clocks -->
+                <div class="demo-section">
+                    <h3 class="demo-section-title">🔢 Lamport Logical Clocks</h3>
+                    <p class="demo-section-desc">Causal ordering of events across distributed nodes — every RMI call increments the clock</p>
+
+                    <div class="lamport-rule">
+                        <strong>Lamport's Rule:</strong> On each event, increment local clock.
+                        On message receive: <code>clock = max(local, received) + 1</code>
+                    </div>
+
+                    <div class="lamport-timeline-container">
+                        <div class="lamport-lane">
+                            <div class="lane-header">HTTP Bridge (Client)</div>
+                            <div class="lane-events" id="lane-client"></div>
+                        </div>
+                        <div class="lamport-arrows" id="lamport-arrows"></div>
+                        <div class="lamport-lane">
+                            <div class="lane-header">RMI Server</div>
+                            <div class="lane-events" id="lane-server"></div>
+                        </div>
+                    </div>
+                    <div style="text-align:center; margin-top:12px;">
+                        <button class="btn btn-secondary" id="btn-clear-timeline" style="font-size:11px; padding:5px 14px;">Clear Timeline</button>
+                        <span style="font-size:11px; color:var(--text-muted); margin-left:12px;">Events are added automatically when you upload, query, or sync</span>
+                    </div>
+                </div>
+
+                <!-- Section 4: Why It Matters -->
+                <div class="demo-section">
+                    <h3 class="demo-section-title">💡 Why Clock Sync Matters in Our RAG Knowledge Base</h3>
+                    <div class="relevance-grid">
+                        <div class="relevance-card">
+                            <div class="relevance-icon">📄</div>
+                            <div class="relevance-title">Document Upload Ordering</div>
+                            <div class="relevance-desc">When multiple documents are uploaded across distributed nodes,
+                                Lamport clocks guarantee a <strong>consistent total ordering</strong> — even if physical clocks disagree on wall-clock time.</div>
+                        </div>
+                        <div class="relevance-card">
+                            <div class="relevance-icon">🔍</div>
+                            <div class="relevance-title">Query-Upload Causality</div>
+                            <div class="relevance-desc">If a query is issued <em>after</em> a document upload, the Lamport timestamp
+                                of the query is guaranteed to be greater — ensuring the query can always "see" that document's chunks.</div>
+                        </div>
+                        <div class="relevance-card">
+                            <div class="relevance-icon">⏱️</div>
+                            <div class="relevance-title">Consistent Timestamps</div>
+                            <div class="relevance-desc">Cristian's Algorithm ensures the HTTP Bridge and RMI Server agree on
+                                <strong>when</strong> events happened — critical for accurate "uploaded at" timestamps stored in MySQL.</div>
+                        </div>
+                        <div class="relevance-card">
+                            <div class="relevance-icon">🔗</div>
+                            <div class="relevance-title">Distributed Audit Trail</div>
+                            <div class="relevance-desc">Every RMI operation (upload, query, sync) carries a Lamport timestamp,
+                                creating a <strong>verifiable causal chain</strong> of all operations across the distributed system.</div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
         </div>
